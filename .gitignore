@@ -1,0 +1,6 @@
+data/
+logs/
+cloud/
+merged/
+__pycache__/
+*.pyc

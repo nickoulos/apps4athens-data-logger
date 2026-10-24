@@ -1,0 +1,75 @@
+# Collects Attica traffic (every minute), STASY elevators and ΜΥΦΑΗ chargers (every 10 min).
+# One run = 5 segments of ~68 min; each segment uploads its data as an artifact, so a lost
+# runner costs at most one segment. The hourly cron plus the concurrency group keeps one run
+# going and one queued, so a new run starts as soon as the previous one ends.
+name: logger
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      segment_minutes:
+        description: "Minutes per segment (5 segments per run)"
+        default: "68"
+
+concurrency:
+  group: logger
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      SEG: ${{ inputs.segment_minutes || '68' }}
+      A4A_STATE: /tmp/a4a/state
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Segment 1
+        if: ${{ !cancelled() }}
+        env: { A4A_DATA: /tmp/a4a/out1, A4A_LOGS: /tmp/a4a/out1/logs }
+        run: python collect.py loop "$SEG"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with: { name: "data-${{ github.run_id }}-1", path: /tmp/a4a/out1, retention-days: 90, compression-level: 0, if-no-files-found: warn }
+
+      - name: Segment 2
+        if: ${{ !cancelled() }}
+        env: { A4A_DATA: /tmp/a4a/out2, A4A_LOGS: /tmp/a4a/out2/logs }
+        run: python collect.py loop "$SEG"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with: { name: "data-${{ github.run_id }}-2", path: /tmp/a4a/out2, retention-days: 90, compression-level: 0, if-no-files-found: warn }
+
+      - name: Segment 3
+        if: ${{ !cancelled() }}
+        env: { A4A_DATA: /tmp/a4a/out3, A4A_LOGS: /tmp/a4a/out3/logs }
+        run: python collect.py loop "$SEG"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with: { name: "data-${{ github.run_id }}-3", path: /tmp/a4a/out3, retention-days: 90, compression-level: 0, if-no-files-found: warn }
+
+      - name: Segment 4
+        if: ${{ !cancelled() }}
+        env: { A4A_DATA: /tmp/a4a/out4, A4A_LOGS: /tmp/a4a/out4/logs }
+        run: python collect.py loop "$SEG"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with: { name: "data-${{ github.run_id }}-4", path: /tmp/a4a/out4, retention-days: 90, compression-level: 0, if-no-files-found: warn }
+
+      - name: Segment 5
+        if: ${{ !cancelled() }}
+        env: { A4A_DATA: /tmp/a4a/out5, A4A_LOGS: /tmp/a4a/out5/logs }
+        run: python collect.py loop "$SEG"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with: { name: "data-${{ github.run_id }}-5", path: /tmp/a4a/out5, retention-days: 90, compression-level: 0, if-no-files-found: warn }
