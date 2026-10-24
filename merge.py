@@ -12,6 +12,7 @@ import csv
 import gzip
 import io
 import json
+import re
 import subprocess
 import sys
 import zipfile
@@ -34,15 +35,37 @@ def gh(*args):
     return subprocess.run(["gh", *args], check=True, capture_output=True).stdout
 
 
+NAME_RE = re.compile(r"^data-\d+-[1-5]$")
+_trusted = {}
+
+
+def trusted_run(run_id, repo_id):
+    """Only artifacts from our own logger workflow on main, started by cron or by hand.
+    The repo is public, so a fork PR could otherwise upload look-alike artifacts."""
+    if run_id not in _trusted:
+        r = json.loads(gh("api", f"repos/{REPO}/actions/runs/{run_id}"))
+        _trusted[run_id] = (r.get("path") == ".github/workflows/logger.yml"
+                            and r.get("head_branch") == "main"
+                            and r.get("event") in ("schedule", "workflow_dispatch")
+                            and r.get("head_repository", {}).get("id") == repo_id)
+    return _trusted[run_id]
+
+
 def download():
     RAW.mkdir(exist_ok=True)
-    page, new = 1, 0
+    repo_id = json.loads(gh("api", f"repos/{REPO}"))["id"]
+    page, new, skipped = 1, 0, 0
     while True:
         res = json.loads(gh("api", f"repos/{REPO}/actions/artifacts?per_page=100&page={page}"))
         arts = res.get("artifacts", [])
         for a in arts:
             dest = RAW / a["name"]
             if a["expired"] or dest.exists():
+                continue
+            wr = a.get("workflow_run") or {}
+            if (not NAME_RE.match(a["name"]) or wr.get("head_repository_id") != repo_id
+                    or wr.get("head_branch") != "main" or not trusted_run(wr.get("id"), repo_id)):
+                skipped += 1
                 continue
             blob = gh("api", f"repos/{REPO}/actions/artifacts/{a['id']}/zip")
             dest.mkdir()
@@ -52,7 +75,7 @@ def download():
         if len(arts) < 100:
             break
         page += 1
-    print(f"downloaded {new} new artifacts into {RAW}")
+    print(f"downloaded {new} new artifacts into {RAW}" + (f"; skipped {skipped} untrusted" if skipped else ""))
 
 
 def read_gz(path):

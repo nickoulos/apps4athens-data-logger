@@ -195,13 +195,18 @@ def run(job):
 
 
 def loop(minutes):
+    # A4A_LOOP_JOBS limits which feeds the loop polls (stasy.gr answers 403 to cloud IPs,
+    # so the GitHub workflow leaves elevators to the local Task Scheduler).
+    jobs = [j for j in os.environ.get("A4A_LOOP_JOBS", ",".join(JOBS)).split(",") if j in JOBS]
     end = time.time() + minutes * 60
     while time.time() < end:
         t = now()
-        run("traffic")
+        if "traffic" in jobs:
+            run("traffic")
         if t.minute % 10 == 0:
-            run("elevators")
-            run("chargers")
+            for j in jobs:
+                if j != "traffic":
+                    run(j)
         # sleep to the start of the next minute (+2s, after the feed's minute tick)
         time.sleep(max(1.0, 62 - time.time() % 60))
 

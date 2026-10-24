@@ -1,4 +1,5 @@
-# Collects Attica traffic (every minute), STASY elevators and ΜΥΦΑΗ chargers (every 10 min).
+# Collects Attica traffic (every minute) and ΜΥΦΑΗ chargers (every 10 min).
+# STASY elevators are not collected here: stasy.gr answers 403 to GitHub's IP ranges.
 # One run = 5 segments of ~68 min; each segment uploads its data as an artifact, so a lost
 # runner costs at most one segment. The hourly cron plus the concurrency group keeps one run
 # going and one queued, so a new run starts as soon as the previous one ends.
@@ -27,6 +28,7 @@ jobs:
     env:
       SEG: ${{ inputs.segment_minutes || '68' }}
       A4A_STATE: /tmp/a4a/state
+      A4A_LOOP_JOBS: traffic,chargers   # stasy.gr returns 403 to GitHub runners; elevators are logged locally
       PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v4
