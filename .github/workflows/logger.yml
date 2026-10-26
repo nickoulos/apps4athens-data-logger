@@ -1,8 +1,9 @@
 # Collects Attica traffic (every minute) and ΜΥΦΑΗ chargers (every 10 min).
 # STASY elevators are not collected here: stasy.gr answers 403 to GitHub's IP ranges.
 # One run = 5 segments of ~68 min; each segment uploads its data as an artifact, so a lost
-# runner costs at most one segment. The hourly cron plus the concurrency group keeps one run
-# going and one queued, so a new run starts as soon as the previous one ends.
+# runner costs at most one segment. Each run queues its successor as its first step (the
+# concurrency group holds it until this run ends), so the chain does not depend on GitHub's
+# cron, which in practice fires only every 3–5 h. The hourly cron restarts the chain if it breaks.
 name: logger
 
 on:
@@ -20,6 +21,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write   # to queue the next run
 
 jobs:
   log:
@@ -31,6 +33,10 @@ jobs:
       A4A_LOOP_JOBS: traffic,chargers   # stasy.gr returns 403 to GitHub runners; elevators are logged locally
       PYTHONUNBUFFERED: "1"
     steps:
+      - name: Queue the next run
+        if: ${{ github.ref == 'refs/heads/main' }}
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh workflow run logger.yml -R "$GITHUB_REPOSITORY" --ref main || echo "could not queue next run; the hourly cron will"
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
